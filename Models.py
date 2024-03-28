@@ -1,9 +1,10 @@
-from telegram.ext import Application, MessageHandler, filters, CommandHandler,ConversationHandler
-from config import BOT_TOKEN
-from telegram import ReplyKeyboardMarkup,InlineKeyboardMarkup, ReplyKeyboardRemove,KeyboardButton,InlineKeyboardButton
+import json
+import random
+import sqlalchemy
 MULTIPLE_CHOICE = 3
 OPEN_ANSWER = 4
-class Poll:
+ALPLHABET = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'W', 'X', 'Y', 'Z']
+class Form:
     def __init__(self):
         self.title = ''
         self.questions = {}
@@ -19,8 +20,29 @@ class Poll:
         if type == OPEN_ANSWER:
             data = "OA#~#" + str(data)
         if type == MULTIPLE_CHOICE:
-            data = "MC#~#" + "#~#".join(map(str,data))
+            #data = "MC#~#" + "#~#".join(map(str,data))
+            data = json.dumps(other)
         self.questions[self.num_of_questions] = data
 
     def __repr__(self):
         return f"Poll {self.title} : " + repr(self.questions)
+
+
+    def save(self):
+        self.questions = json.dumps(self.questions)
+
+        key = f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}" \
+              f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}" \
+              f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}"      ### коннект с БД
+
+        return key
+
+
+class Poll:
+    def __init__(self):
+        self.dict = {}
+
+
+if __name__ == '__main__':
+    a = Form()
+    a.save()

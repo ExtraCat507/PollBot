@@ -1,10 +1,13 @@
 # Импортируем необходимые классы.
 import logging
-from telegram.ext import Application, MessageHandler, filters, CommandHandler,ConversationHandler
 
-from Models import Poll
+from telegram.constants import MessageEntityType
+from telegram.ext import Application, MessageHandler, filters, CommandHandler, ConversationHandler
+
+from Models import Form, Poll
 from config import BOT_TOKEN
-from telegram import ReplyKeyboardMarkup,InlineKeyboardMarkup, ReplyKeyboardRemove,KeyboardButton,InlineKeyboardButton
+from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, \
+    InlineKeyboardButton, PollOption,MessageEntity
 
 # Запускаем логгирование
 logging.basicConfig(
@@ -12,22 +15,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 MULTIPLE_CHOICE = 3
 OPEN_ANSWER = 4
 
-async def echo(update, context):
-    await update.message.reply_text(update.message.text)
 
-async def start(update,context):
+async def echo(update, context):
+    print(repr(update.message))
+
+
+async def start(update, context):
     """Отправляет сообщение когда получена команда /start"""
-    keyboard = ReplyKeyboardMarkup([['/create_poll', '/vote'],['/statistics','/help']], one_time_keyboard=True,resize_keyboard=True)
+    keyboard = ReplyKeyboardMarkup([['/create_poll', '/vote'], ['/statistics', '/help']], one_time_keyboard=True,
+                                   resize_keyboard=True)
     user = update.effective_user
     await update.message.reply_html(
         rf"Привет, {user.mention_html()}! Я помогаю проводить опросы и собирать по ним статистику. Поработаем?) ",
         reply_markup=keyboard
     )
-
 
 
 async def help_command(update, context):
@@ -36,44 +40,51 @@ async def help_command(update, context):
 
 
 async def okd(update, context):
-    keyboard = ReplyKeyboardMarkup([[InlineKeyboardButton("First Option!",),InlineKeyboardButton("Second option🏆")]])
+    keyboard = ReplyKeyboardMarkup([[InlineKeyboardButton("First Option!", ), InlineKeyboardButton("Second option🏆")]])
     await update.message.reply_text(
         "Ok",
         reply_markup=keyboard
     )
 
-async def close_keyboard(update,context):
+
+async def close_keyboard(update, context):
     await update.message.reply_text(
         "Заркываю клаву",
         reply_markup=ReplyKeyboardRemove()
     )
 
 
-async def create_poll(update,context):
+async def create_poll(update, context):
     await update.message.reply_text(
         "Давайте создадим новый опрос, введите его тему: ",
         reply_markup=ReplyKeyboardRemove()
     )
 
-    poll = Poll()
-    context.user_data['poll'] = poll
+    form = Form()
+    context.user_data['poll'] = form
     return 1
 
 
-
-async def title_response(update,context):
+async def title_response(update, context):
     poll = context.user_data['poll']
     poll.set_title(update.message.text)
     await update.message.reply_text(
         "Отлично,теперь приступим к добавлению вопросов!\nДобавляй вопросы с помощью кнопок внизу, когда закончишь, думаю, очевидно что нажимать 😄",
-        reply_markup = ReplyKeyboardMarkup([['Вопрос с вариантами ответа'],['Вопрос с открытым ответом'],['На этом всё']],one_time_keyboard=True,resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(
+            [['Вопрос с вариантами ответа'], ['Вопрос с открытым ответом'], ['На этом всё']], one_time_keyboard=True,
+            resize_keyboard=True)
     )
     return 2
 
-async def question_response(update,context):
+
+async def question_response(update, context):
     reply = update.message.text
     if reply == 'Вопрос с вариантами ответа':
-        pass
+        await update.message.reply_text(
+            "Пришли мне тг-опрос: ",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return MULTIPLE_CHOICE
 
     elif reply == 'Вопрос с открытым ответом':
         await update.message.reply_text(
@@ -83,10 +94,17 @@ async def question_response(update,context):
         return OPEN_ANSWER
 
     elif reply == 'На этом всё':
-        await update.message.reply_text(
-            "Спасибо за составление опроса!"
-        )
-        print(context.user_data['poll'])
+        poll = context.user_data['poll']
+        key = poll.save()
+        if key == "ERROR":
+            await update.message.reply_text("Что-то пошло не так :(")
+        else:
+            await update.message.reply_text(
+                f"Спасибо за составление опроса!\n"
+                f"Идентификатор опроса: {key} \n"
+                f"Делись им с друзьями, чтобы они могли пройти твой опрос",
+                entities=(MessageEntity(type=MessageEntityType.CODE,offset=53,length=11),)
+            )
         return ConversationHandler.END
 
     else:
@@ -99,13 +117,30 @@ async def question_response(update,context):
         return 2
 
 
-async def multiple_choice_init(update,context):
-    pass
+async def multiple_choice_init(update, context):
+    poll = update.message.poll
+    # print(poll.question, repr(poll.options), poll.type, poll.allows_multiple_answers)
+    questions = list(map(lambda x: x.text, poll.options))
+    # message = await context.bot.send_poll(
+    #     chat_id=update.effective_chat.id,
+    #     question=poll.question,
+    #     type=poll.type,
+    #     allows_multiple_answers=poll.allows_multiple_answers,
+    #     is_anonymous= False,
+    #     options=questions)
 
-async def open_answer_init(update,context):
-    text = update.message.text
-    poll = context.user_data['poll']
-    poll.append((OPEN_ANSWER,text))
+    poll_dict = {
+        'chat_id': update.effective_chat.id,
+        'question': poll.question,
+        'type': poll.type,
+        'allows_multiple_answers': poll.allows_multiple_answers,
+        'is_anonymous': poll.is_anonymous,
+        'options': questions
+    }
+
+    form = context.user_data['poll']
+
+    form.append((MULTIPLE_CHOICE, poll_dict))
 
     await update.message.reply_text(
         "Вопрос добавлен",
@@ -117,13 +152,56 @@ async def open_answer_init(update,context):
     return 2
 
 
+async def open_answer_init(update, context):
+    text = update.message.text
+    form = context.user_data['poll']
+    form.append((OPEN_ANSWER, text))
+
+    await update.message.reply_text(
+        "Вопрос добавлен",
+        reply_markup=ReplyKeyboardMarkup(
+            [['Вопрос с вариантами ответа'], ['Вопрос с открытым ответом'], ['На этом всё']],
+            one_time_keyboard=True, resize_keyboard=True)
+    )
+
+    return 2
 
 
-async def vote(update,context):
+async def vote(update, context):
     pass
 
-async def get_statistics(update,context):
+
+async def get_statistics(update, context):
     pass
+
+
+# async def poll_handler(update, context):
+#     poll = update.message.poll
+#     #print(poll.question, repr(poll.options), poll.type, poll.allows_multiple_answers)
+#     questions = list(map(lambda x : x.text,poll.options))
+#     # message = await context.bot.send_poll(
+#     #     chat_id=update.effective_chat.id,
+#     #     question=poll.question,
+#     #     type=poll.type,
+#     #     allows_multiple_answers=poll.allows_multiple_answers,
+#     #     is_anonymous= False,
+#     #     options=questions)
+#
+#     poll_dict = {
+#         'chat_id':update.effective_chat.id,
+#         'question':poll.question,
+#         'type':poll.type,
+#         'allows_multiple_answers':poll.allows_multiple_answers,
+#         'is_anonymous': False,
+#         'options':questions
+#     }
+#
+#     form = context.user_data['poll']
+#
+#     form.append((MULTIPLE_CHOICE,poll_dict))
+#
+#     return 2
+
 
 def main():
     # Создаём объект Application.
@@ -135,9 +213,9 @@ def main():
     # После регистрации обработчика в приложении
     # эта асинхронная функция будет вызываться при получении сообщения
     # с типом "текст", т. е. текстовых сообщений.
-    #text_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, echo)
+    text_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, echo)
 
-    #добавили обработчик команд
+    # добавили обработчик команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("okd", okd))
@@ -152,8 +230,8 @@ def main():
             1: [MessageHandler(filters.TEXT & ~filters.COMMAND, title_response)],
             # Функция читает ответ на второй вопрос и завершает диалог.
             2: [MessageHandler(filters.TEXT & ~filters.COMMAND, question_response)],
-            MULTIPLE_CHOICE : [MessageHandler(filters.TEXT & ~filters.COMMAND, multiple_choice_init)],
-            OPEN_ANSWER : [MessageHandler(filters.TEXT & ~filters.COMMAND, open_answer_init)]
+            MULTIPLE_CHOICE: [MessageHandler(filters.POLL & ~filters.COMMAND, multiple_choice_init)],
+            OPEN_ANSWER: [MessageHandler(filters.TEXT & ~filters.COMMAND, open_answer_init)]
         },
 
         fallbacks=[CommandHandler("close_keyboard", close_keyboard)]
@@ -161,9 +239,9 @@ def main():
     )
     application.add_handler(form_creation)
 
-   # application.add_handler(text_handler)
+    application.add_handler(text_handler)
 
-
+    #application.add_handler(MessageHandler(filters.POLL, poll_handler))
 
     # Запускаем приложение.
     application.run_polling()
