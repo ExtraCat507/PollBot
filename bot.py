@@ -206,14 +206,31 @@ async def open_survey(update,context):
         await update.message.reply_text("Не удалось загрузить опрос, проверьте корректность кода и введите его ещё раз:")
         return 1
     context.user_data['poll'] = poll
+    print(poll)
 
-    # for el in survey:
-    #     print(f'Вопрос номер {el}')
-    #     print(poll.questions[el])
+    questions = []
+    textentities = []
+
     userID = survey["userID"]
+    PollTitle = survey["title"]
+    sumLen = 9 + len(str(userID)) + 34 + len(str(PollTitle))
+    for k in sorted(survey):
+        if k == "userID":
+            continue
+        ans = survey[k][1]
+        if survey[k][0] == OPEN_ANSWER:
+            questions.append([f"/ans{k} (🗒) " + ans+"\n"])
+            textentities.append(MessageEntity(type=MessageEntityType.BOT_COMMAND,offset=sumLen,length=len(str(k))+4))
+            sumLen+=len(str(k))+4 + 1 + len(ans) + 4
+        else:
+            pass
+
+
     await update.message.reply_html(
-        f"Опрос от {userID}\n"
-        f"Вот список вопросов:"
+        f"Опрос от {userID}.Тема опроса: {PollTitle}\n"
+        f"Вот список вопросов:\n"+
+        '\n'.join(map(lambda x : x[0],questions)),
+        entities=textentities
     )
 
     return ConversationHandler.END

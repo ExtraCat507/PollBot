@@ -19,10 +19,11 @@ class Form:
         type,data = other
         if type == OPEN_ANSWER:
             #data = "OA#~#" + str(data)
-            data = str(data)
+            data = [type,str(data)]
         if type == MULTIPLE_CHOICE:
             #data = "MC#~#" + "#~#".join(map(str,data))
-            data = json.dumps(other)
+            #data = json.dumps(other)
+            data = other
         self.questions[self.num_of_questions] = data
 
     def __repr__(self):
@@ -31,6 +32,7 @@ class Form:
 
     def save(self,userID):
         self.questions["userID"] = str(userID)
+        self.questions["title"] = str(self.title)
         key = f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}" \
               f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}" \
               f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}"      ### коннект с БД
