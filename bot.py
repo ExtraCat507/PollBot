@@ -105,6 +105,7 @@ async def question_response(update, context):
                 f"Делись им с друзьями, чтобы они могли пройти твой опрос",
                 entities=(MessageEntity(type=MessageEntityType.CODE,offset=53,length=11),)
             )
+        context.user_data['poll'] = None
         return ConversationHandler.END
 
     else:
@@ -168,7 +169,20 @@ async def open_answer_init(update, context):
 
 
 async def vote(update, context):
-    pass
+    await update.message.reply_text(
+        "Пришли мне идентификатор опроса"
+    )
+    return 1
+
+async def open_survey(update,context):
+    title = update.message.text
+    poll = Form()
+    reply = poll.load(title)
+    if reply == "Load Error":
+        await update.message.reply_text("Не удалось загрузить опрос, проверьте корректность кода и введите его ещё раз:")
+        return 1
+    context.user_data['poll'] = poll
+    print(poll)
 
 
 async def get_statistics(update, context):
@@ -220,7 +234,7 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("okd", okd))
     application.add_handler(CommandHandler("close_keyboard", close_keyboard))
-    application.add_handler(CommandHandler("vote", vote))
+    #application.add_handler(CommandHandler("vote", vote))
     # Регистрируем обработчик в приложении.
 
     form_creation = ConversationHandler(
@@ -238,6 +252,18 @@ def main():
 
     )
     application.add_handler(form_creation)
+
+
+    form_voting = ConversationHandler(
+        entry_points=[CommandHandler('vote', vote)],
+
+        states={
+            1 : [MessageHandler(filters.TEXT & ~filters.COMMAND,open_survey)]
+        },
+
+        fallbacks=[CommandHandler("close_keyboard", close_keyboard)]
+    )
+    application.add_handler(form_voting)
 
     application.add_handler(text_handler)
 

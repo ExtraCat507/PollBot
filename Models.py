@@ -31,11 +31,29 @@ class Form:
     def save(self):
         self.questions = json.dumps(self.questions)
 
+
+
         key = f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}" \
               f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}" \
               f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}"      ### коннект с БД
 
+        with open(f'data/forms/{key}.json', mode='w') as js:
+            json.dump(self.questions, js)
+
+        print(self.questions)
         return key
+
+
+    def load(self,title):
+        try:
+            with open(f'data/forms/{title}.json',mode='r') as js:
+                survey = json.load(js)
+        except Exception as e:
+            return "Load Error"
+        self.questions = survey
+        print(survey)
+
+
 
 
 class Poll:
