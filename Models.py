@@ -18,7 +18,8 @@ class Form:
         self.num_of_questions+=1
         type,data = other
         if type == OPEN_ANSWER:
-            data = "OA#~#" + str(data)
+            #data = "OA#~#" + str(data)
+            data = str(data)
         if type == MULTIPLE_CHOICE:
             #data = "MC#~#" + "#~#".join(map(str,data))
             data = json.dumps(other)
@@ -28,11 +29,8 @@ class Form:
         return f"Poll {self.title} : " + repr(self.questions)
 
 
-    def save(self):
-        self.questions = json.dumps(self.questions)
-
-
-
+    def save(self,userID):
+        self.questions["userID"] = str(userID)
         key = f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}" \
               f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}" \
               f"{random.choice(ALPLHABET)}{random.randint(0, 9)}{random.randint(0, 9)}"      ### коннект с БД
@@ -40,7 +38,6 @@ class Form:
         with open(f'data/forms/{key}.json', mode='w') as js:
             json.dump(self.questions, js)
 
-        print(self.questions)
         return key
 
 
@@ -51,8 +48,7 @@ class Form:
         except Exception as e:
             return "Load Error"
         self.questions = survey
-        print(survey)
-
+        return survey
 
 
 
@@ -63,4 +59,5 @@ class Poll:
 
 if __name__ == '__main__':
     a = Form()
+    a.append((OPEN_ANSWER,"owkoekrf"))
     a.save()

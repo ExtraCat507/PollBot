@@ -30,13 +30,36 @@ async def start(update, context):
     user = update.effective_user
     await update.message.reply_html(
         rf"Привет, {user.mention_html()}! Я помогаю проводить опросы и собирать по ним статистику. Поработаем?) ",
-        reply_markup=keyboard
+        #reply_markup=keyboard
     )
+
+async def stop(update,context):
+    await update.message.reply_text(
+        "Текущая беседа завершена",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
 
 
 async def help_command(update, context):
     """Отправляет сообщение когда получена команда /help"""
-    await update.message.reply_text("Я пока не умею помогать... Я только ваше эхо.")
+    await update.message.reply_text(
+        "Привет, давай покажу как у меня тут всё работает.\n"
+        "Я - бот для создания и обработки опросов и форм. Пользоваться мной очень просто!\n"
+        "\n"
+        "/create_poll - Создай свой опрос по шагам, затем делись его ID-кодом, чтобы другие смогли его пройти\n"
+        "\n"
+        "/vote - Отправь мне ID формы и проголосуй\n"
+        "\n"
+        "/stop - Во время диалога с ботом жми сюда как на большую красную кнопку и кричи хелпсос\n(если хочешь завершить его конечно)\n"
+        "\n"
+        "/help - Ещё раз прослушать это всё",
+        entities=[MessageEntity(type=MessageEntityType.BOT_COMMAND,offset=129,length=12),
+                  MessageEntity(type=MessageEntityType.BOT_COMMAND,offset=229,length=5),
+                  MessageEntity(type=MessageEntityType.BOT_COMMAND,offset=270,length=5),
+                  MessageEntity(type=MessageEntityType.BOT_COMMAND, offset=392, length=5)
+                  ]
+    )
 
 
 async def okd(update, context):
@@ -95,7 +118,7 @@ async def question_response(update, context):
 
     elif reply == 'На этом всё':
         poll = context.user_data['poll']
-        key = poll.save()
+        key = poll.save(update.effective_user.mention_html())
         if key == "ERROR":
             await update.message.reply_text("Что-то пошло не так :(")
         else:
@@ -103,7 +126,8 @@ async def question_response(update, context):
                 f"Спасибо за составление опроса!\n"
                 f"Идентификатор опроса: {key} \n"
                 f"Делись им с друзьями, чтобы они могли пройти твой опрос",
-                entities=(MessageEntity(type=MessageEntityType.CODE,offset=53,length=11),)
+                entities=(MessageEntity(type=MessageEntityType.CODE,offset=53,length=11),),
+                reply_markup = ReplyKeyboardRemove()
             )
         context.user_data['poll'] = None
         return ConversationHandler.END
@@ -177,12 +201,22 @@ async def vote(update, context):
 async def open_survey(update,context):
     title = update.message.text
     poll = Form()
-    reply = poll.load(title)
-    if reply == "Load Error":
+    survey = poll.load(title)
+    if survey == "Load Error":
         await update.message.reply_text("Не удалось загрузить опрос, проверьте корректность кода и введите его ещё раз:")
         return 1
     context.user_data['poll'] = poll
-    print(poll)
+
+    # for el in survey:
+    #     print(f'Вопрос номер {el}')
+    #     print(poll.questions[el])
+    userID = survey["userID"]
+    await update.message.reply_html(
+        f"Опрос от {userID}\n"
+        f"Вот список вопросов:"
+    )
+
+    return ConversationHandler.END
 
 
 async def get_statistics(update, context):
@@ -248,7 +282,7 @@ def main():
             OPEN_ANSWER: [MessageHandler(filters.TEXT & ~filters.COMMAND, open_answer_init)]
         },
 
-        fallbacks=[CommandHandler("close_keyboard", close_keyboard)]
+        fallbacks=[CommandHandler("stop", stop)]
 
     )
     application.add_handler(form_creation)
@@ -261,7 +295,7 @@ def main():
             1 : [MessageHandler(filters.TEXT & ~filters.COMMAND,open_survey)]
         },
 
-        fallbacks=[CommandHandler("close_keyboard", close_keyboard)]
+        fallbacks=[CommandHandler("stop", stop)]
     )
     application.add_handler(form_voting)
 
