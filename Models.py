@@ -9,6 +9,7 @@ class Form:
         self.title = ''
         self.questions = {}
         self.num_of_questions = 0
+        self.answers = {}
 
     def set_title(self,title):
         self.title = title
@@ -51,6 +52,9 @@ class Form:
             return "Load Error"
         self.questions = survey
         return survey
+
+    def save_answers(self,answers):
+        self.answers = answers
 
 
 

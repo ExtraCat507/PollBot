@@ -2,12 +2,12 @@
 import logging
 
 from telegram.constants import MessageEntityType
-from telegram.ext import Application, MessageHandler, filters, CommandHandler, ConversationHandler
+from telegram.ext import Application, MessageHandler, filters, CommandHandler, ConversationHandler,CallbackQueryHandler
 
 from Models import Form, Poll
 from config import BOT_TOKEN
 from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, \
-    InlineKeyboardButton, PollOption,MessageEntity
+    InlineKeyboardButton, PollOption,MessageEntity,Update
 
 # Запускаем логгирование
 logging.basicConfig(
@@ -32,6 +32,28 @@ async def echo(update, context):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text("Please choose:", reply_markup=reply_markup)
+
+
+
+async def button(update: Update, context) -> None:
+    """Parses the CallbackQuery and updates the message text."""
+    query = update.callback_query
+
+    # CallbackQueries need to be answered, even if no notification to the user is needed
+    # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
+    await query.answer()
+
+    await query.edit_message_text(text=f"Selected option: {query.data}")
+
+
+
+
+
+
+
+
+
+
 
 
 async def start(update, context):
@@ -215,7 +237,7 @@ async def vote(update, context):
     )
     return 1
 
-async def open_survey(update,context):
+async def open_survey(update,context):      #Повторное открытие опроса не сохраняет прошлые ответы, надо переработать poll.load()
     title = update.message.text
     poll = Form()
     survey = poll.load(title)
@@ -227,14 +249,14 @@ async def open_survey(update,context):
     userID = survey["userID"]
     PollTitle = poll.title
     context.user_data['pollID'] = title
-    context.user_data['answers'] = {}
-
-    await print_form(update,context)
+    context.user_data['answers'] = poll.answers
+    context.user_data['chat_id'] = update.effective_message.chat_id
+    await print_form(context)
 
     return "collect_answers"
 
 
-async def print_form(update,context):
+async def print_form(context):
     if context.user_data['poll'] is None:
         print("No poll")
         return
@@ -268,17 +290,30 @@ async def print_form(update,context):
             questions.append([""])
 
 
-    await update.message.reply_html(
-        f"Опрос от {userID}. Тема опроса: <b>{PollTitle}</b>\n"
-        f"Вот список вопросов:\n"+
-        '\n'.join(map(lambda x : x[0],questions)),
-        entities=textentities
+    # await update.message.reply_html(
+    #     f"Опрос от {userID}. Тема опроса: <b>{PollTitle}</b>\n"
+    #     f"Вот список вопросов:\n"+
+    #     '\n'.join(map(lambda x : x[0],questions)),
+    #     entities=textentities
+    # )
+    await context.bot.send_message(
+        text=f"Опрос от {userID}. Тема опроса: <b>{PollTitle}</b>\n"
+             f"Вот список вопросов:\n"+
+             '\n'.join(map(lambda x : x[0],questions))+"\n"+
+            f"Когда будете готовы отправить форму введите /done",
+        entities=textentities + [MessageEntity(type=MessageEntityType.CODE,offset=sumLen+44,length=5)],
+        parse_mode='HTML',
+        chat_id=context.user_data['chat_id']
     )
+
 
 async def ans_handler(update,context):
     text = update.message.text
     if text[:5] == "/stop":
         await stop(update,context)
+        return ConversationHandler.END
+    if text[:5] == "/done":
+        await done(update,context)
         return ConversationHandler.END
 
     if text[:4] != "/ans":
@@ -300,30 +335,40 @@ async def ans_handler(update,context):
     if question[0] == OPEN_ANSWER:
         await update.message.reply_text(
             f"Вопрос №{number},\n"
-            f"Текст вопроса:  {question[1]}\n"
+            f"Текст вопроса: {question[1]}\n"
             f"Ваш предыдущий ответ: {answers.get(number,'Пусто')}\n"
             f"Введите ваш новый ответ: ",
-            entities=[MessageEntity(type=MessageEntityType.CODE,offset=9+len(number)+16+len(question[1]) + 22 + 2,length=len(answers.get(number,'Пусто'))),
-                      MessageEntity(type=MessageEntityType.BOLD,offset=9+len(number)+16,length=len(question[1]))]
+            entities=[MessageEntity(type=MessageEntityType.CODE,offset=9+len(number)+15+len(question[1]) + 22 + 2,length=len(answers.get(number,'Пусто'))),
+                      MessageEntity(type=MessageEntityType.BOLD,offset=9+len(number)+15,length=len(question[1]))]
         )
         context.user_data['last_question'] = number
         return "open_answer_save"
+
     if question[0] == MULTIPLE_CHOICE:
         options = question[1]['options']
-        print(options)
+        keyboard = []
+        for opt in options:
+            key = [InlineKeyboardButton(text=opt,callback_data=opt)]
+            keyboard.append(key)
+
         await update.message.reply_text(
             f"Вопрос №{number},\n"
-            f"Текст вопроса:  {question[1]['question']}\n"
+            f"Текст вопроса: {question[1]['question']}\n"
             f"Варианты ответа:\n"+
             "\n".join(["-" + el for el in options])+"\n"+
             f"Ваш предыдущий ответ: {answers.get(number, 'Пусто')}\n"
-            f"Введите ваш новый ответ: ",
+            f"Выберите ваш новый ответ: ",
             entities=[
-                MessageEntity(type=MessageEntityType.CODE, offset=9 + len(number) + 16 + len(question[1]['question']) + 16 +  sum([len(a)+3 for a in options]) + 22,
-                              length=len(answers.get(number, 'Пусто'))),
-                MessageEntity(type=MessageEntityType.BOLD, offset=9 + len(number) + 16, length=len(question[1]['question']))]
+                MessageEntity(type=MessageEntityType.BOLD, offset=9 + len(number) + 16, length=len(question[1]['question'])),
+                MessageEntity(type=MessageEntityType.CODE,
+                              offset=2 + 9 + len(number) + 16 + len(question[1]['question']) + 16 + sum(
+                                  [len(a) + 2 for a in options]) + 22,
+                              length=len(answers.get(number, 'Пусто')))
+            ],
+            reply_markup= InlineKeyboardMarkup(keyboard)
         )
-
+        context.user_data['last_question'] = number
+        return "collect_answers"
 
 async def open_answer_save(update,context):
     text = update.message.text
@@ -332,9 +377,45 @@ async def open_answer_save(update,context):
     await update.message.reply_text(
         "Ответ сохранён"
     )
-    await print_form(update,context)
+    await print_form(context)
     return "collect_answers"
 
+
+
+async def multiple_options_save(update,context):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    number = context.user_data['last_question']
+    await query.edit_message_text(
+        text = query.message.text[:len(query.message.text) - 26 - 22 - len(context.user_data['answers'].get(number,"Пусто"))],
+        entities=query.message.entities[0:1],
+        reply_markup=InlineKeyboardMarkup([]))
+    await query.message.reply_text(
+        f"В вопросе №{number} выбран ответ: {data}",
+        entities=[MessageEntity(type=MessageEntityType.BOLD,offset=26+len(number),length=len(data))]
+    )
+    await print_form(context)
+    context.user_data['answers'][number] = data
+
+
+async def done(update,context):
+    poll = context.user_data.get("poll",None)
+    answers = context.user_data.get("answers",None)
+    if poll is None:
+        print("No Poll")
+        return ConversationHandler.END
+    if answers is None:
+        print("No answers")
+        return ConversationHandler.END
+
+    poll.save_answers(answers)
+
+    await update.message.reply_text(
+        "Ваши ответы успешно сохранены"
+    )
+
+    return ConversationHandler.END
 
 async def get_statistics(update, context):
     pass
@@ -388,7 +469,7 @@ def main():
             "open_answer_save":[MessageHandler(filters.TEXT & ~filters.COMMAND,open_answer_save)]
         },
 
-        fallbacks=[CommandHandler("stop", stop)]
+        fallbacks=[CommandHandler("stop", stop),CommandHandler("done",done)]
     )
     application.add_handler(form_voting)
 
@@ -406,10 +487,11 @@ def main():
 
     application.add_handler(text_handler)
 
-    #application.add_handler(MessageHandler(filters.POLL, poll_handler))
+    application.add_handler(CallbackQueryHandler(multiple_options_save))
+
 
     # Запускаем приложение.
-    application.run_polling()
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 # Запускаем функцию main() в случае запуска скрипта.
