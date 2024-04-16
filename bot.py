@@ -20,7 +20,18 @@ OPEN_ANSWER = 4
 
 
 async def echo(update, context):
-    print(repr(update.message))
+    """Sends a message with three inline buttons attached."""
+    keyboard = [
+        [
+            InlineKeyboardButton("Option 1", callback_data="1"),
+            InlineKeyboardButton("Option 2", callback_data="2"),
+        ],
+        [InlineKeyboardButton("Option 3", callback_data="3")],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text("Please choose:", reply_markup=reply_markup)
 
 
 async def start(update, context):
@@ -32,6 +43,7 @@ async def start(update, context):
         rf"Привет, {user.mention_html()}! Я помогаю проводить опросы и собирать по ним статистику. Поработаем?) ",
         #reply_markup=keyboard
     )
+    return 1
 
 async def stop(update,context):
     await update.message.reply_text(
@@ -60,6 +72,11 @@ async def help_command(update, context):
                   MessageEntity(type=MessageEntityType.BOT_COMMAND, offset=392, length=5)
                   ]
     )
+
+
+async def getting_started(update,context):
+    await help_command(update,context)
+    return ConversationHandler.END
 
 
 async def okd(update, context):
@@ -207,7 +224,24 @@ async def open_survey(update,context):
         return 1
     context.user_data['poll'] = poll
     poll.set_title(survey['title'])
+    userID = survey["userID"]
+    PollTitle = poll.title
+    context.user_data['pollID'] = title
+    context.user_data['answers'] = {}
 
+    await print_form(update,context)
+
+    return "collect_answers"
+
+
+async def print_form(update,context):
+    if context.user_data['poll'] is None:
+        print("No poll")
+        return
+
+    poll = context.user_data['poll']
+    pollID = context.user_data['pollID']
+    survey = poll.load(pollID)
     questions = []
     textentities = []
 
@@ -241,39 +275,71 @@ async def open_survey(update,context):
         entities=textentities
     )
 
-    return ConversationHandler.END
+async def ans_handler(update,context):
+    text = update.message.text
+    if text[:5] == "/stop":
+        await stop(update,context)
+        return ConversationHandler.END
+
+    if text[:4] != "/ans":
+        await update.message.reply_text("Не угадал, надо нажать на /ans{номер вопроса} чтобы ответить на вопрос")
+        return "collect_answers"
+    try:
+        number = str(int(text[4:]))
+    except Exception as e:
+        await update.message.reply_text("Не угадал, надо нажать на /ans{номер вопроса} чтобы ответить на вопрос")
+        return "collect_answers"
+
+    poll = context.user_data['poll']
+    question = poll.questions.get(number,None)
+    answers = context.user_data['answers']
+    if question is None:
+        await update.message.reply_text("Не угадал, надо нажать на /ans{номер вопроса} чтобы ответить на вопрос")
+        return "collect_answers"
+
+    if question[0] == OPEN_ANSWER:
+        await update.message.reply_text(
+            f"Вопрос №{number},\n"
+            f"Текст вопроса:  {question[1]}\n"
+            f"Ваш предыдущий ответ: {answers.get(number,'Пусто')}\n"
+            f"Введите ваш новый ответ: ",
+            entities=[MessageEntity(type=MessageEntityType.CODE,offset=9+len(number)+16+len(question[1]) + 22 + 2,length=len(answers.get(number,'Пусто'))),
+                      MessageEntity(type=MessageEntityType.BOLD,offset=9+len(number)+16,length=len(question[1]))]
+        )
+        context.user_data['last_question'] = number
+        return "open_answer_save"
+    if question[0] == MULTIPLE_CHOICE:
+        options = question[1]['options']
+        print(options)
+        await update.message.reply_text(
+            f"Вопрос №{number},\n"
+            f"Текст вопроса:  {question[1]['question']}\n"
+            f"Варианты ответа:\n"+
+            "\n".join(["-" + el for el in options])+"\n"+
+            f"Ваш предыдущий ответ: {answers.get(number, 'Пусто')}\n"
+            f"Введите ваш новый ответ: ",
+            entities=[
+                MessageEntity(type=MessageEntityType.CODE, offset=9 + len(number) + 16 + len(question[1]['question']) + 16 +  sum([len(a)+3 for a in options]) + 22,
+                              length=len(answers.get(number, 'Пусто'))),
+                MessageEntity(type=MessageEntityType.BOLD, offset=9 + len(number) + 16, length=len(question[1]['question']))]
+        )
+
+
+async def open_answer_save(update,context):
+    text = update.message.text
+    number = context.user_data['last_question']
+    context.user_data['answers'][number] = text
+    await update.message.reply_text(
+        "Ответ сохранён"
+    )
+    await print_form(update,context)
+    return "collect_answers"
 
 
 async def get_statistics(update, context):
     pass
 
 
-# async def poll_handler(update, context):
-#     poll = update.message.poll
-#     #print(poll.question, repr(poll.options), poll.type, poll.allows_multiple_answers)
-#     questions = list(map(lambda x : x.text,poll.options))
-#     # message = await context.bot.send_poll(
-#     #     chat_id=update.effective_chat.id,
-#     #     question=poll.question,
-#     #     type=poll.type,
-#     #     allows_multiple_answers=poll.allows_multiple_answers,
-#     #     is_anonymous= False,
-#     #     options=questions)
-#
-#     poll_dict = {
-#         'chat_id':update.effective_chat.id,
-#         'question':poll.question,
-#         'type':poll.type,
-#         'allows_multiple_answers':poll.allows_multiple_answers,
-#         'is_anonymous': False,
-#         'options':questions
-#     }
-#
-#     form = context.user_data['poll']
-#
-#     form.append((MULTIPLE_CHOICE,poll_dict))
-#
-#     return 2
 
 
 def main():
@@ -289,7 +355,7 @@ def main():
     text_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, echo)
 
     # добавили обработчик команд
-    application.add_handler(CommandHandler("start", start))
+    #application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("okd", okd))
     application.add_handler(CommandHandler("close_keyboard", close_keyboard))
@@ -317,12 +383,26 @@ def main():
         entry_points=[CommandHandler('vote', vote)],
 
         states={
-            1 : [MessageHandler(filters.TEXT & ~filters.COMMAND,open_survey)]
+            1 : [MessageHandler(filters.TEXT & ~filters.COMMAND,open_survey)],
+            "collect_answers": [MessageHandler(filters.TEXT,ans_handler)],
+            "open_answer_save":[MessageHandler(filters.TEXT & ~filters.COMMAND,open_answer_save)]
         },
 
         fallbacks=[CommandHandler("stop", stop)]
     )
     application.add_handler(form_voting)
+
+
+    start_handler = ConversationHandler(
+        entry_points=[CommandHandler("start",start)],
+        states = {
+            1: [MessageHandler(filters.TEXT & ~ filters.COMMAND,getting_started)]
+        },
+        fallbacks=[CommandHandler("stop", stop),CommandHandler("help", help_command),CommandHandler("create_poll",create_poll),CommandHandler("vote",vote)]
+    )
+    application.add_handler(start_handler)
+
+
 
     application.add_handler(text_handler)
 
