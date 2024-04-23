@@ -9,6 +9,8 @@ from config import BOT_TOKEN
 from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, \
     InlineKeyboardButton, PollOption,MessageEntity,Update
 
+from data import db_session
+
 # Запускаем логгирование
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
@@ -424,6 +426,9 @@ async def get_statistics(update, context):
 
 
 def main():
+    db_session.global_init("dp/bot.db")
+
+
     # Создаём объект Application.
 
     application = Application.builder().token(BOT_TOKEN).build()
@@ -496,4 +501,5 @@ def main():
 
 # Запускаем функцию main() в случае запуска скрипта.
 if __name__ == '__main__':
+
     main()

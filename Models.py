@@ -1,11 +1,17 @@
 import json
 import random
-import sqlalchemy
+
+import sqlalchemy as sa
+from data import db_session
+from data.models.form import FormSQL
+from data.models.users import UserSQL
+
 MULTIPLE_CHOICE = 3
 OPEN_ANSWER = 4
 ALPLHABET = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'W', 'X', 'Y', 'Z']
 class Form:
     def __init__(self):
+
         self.title = ''
         self.questions = {}
         self.num_of_questions = 0
@@ -40,6 +46,19 @@ class Form:
 
         with open(f'data/forms/{key}.json', mode='w') as js:
             json.dump(self.questions, js)
+
+
+
+        form = FormSQL()
+        print("ss")
+        form.id = key
+        form.title = self.title
+        userID = 333
+        form.file = f'data/forms/{key}.json'
+        db_sess = db_session.create_session()
+        db_sess.add(form)
+        db_sess.commit()
+
 
         return key
 
