@@ -20,6 +20,8 @@ class FormSQL(SqlAlchemyBase):
                                 sqlalchemy.ForeignKey("users.id"))
     user = orm.relationship('UserSQL')
 
-    file = sqlalchemy.Column(sqlalchemy.String)
+    file = sqlalchemy.Column(sqlalchemy.String) #Вопросы
+
+    answers = sqlalchemy.Column(sqlalchemy.String) #Ответы пользователей
 
 

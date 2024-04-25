@@ -10,6 +10,7 @@ from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, ReplyKeyboardRem
     InlineKeyboardButton, PollOption,MessageEntity,Update
 
 from data import db_session
+from data.models.users import UserSQL
 
 # Запускаем логгирование
 logging.basicConfig(
@@ -67,6 +68,21 @@ async def start(update, context):
         rf"Привет, {user.mention_html()}! Я помогаю проводить опросы и собирать по ним статистику. Поработаем?) ",
         #reply_markup=keyboard
     )
+    db_sess = db_session.create_session()
+    userObject = db_sess.query(UserSQL).filter(UserSQL.id == user.id).first()
+    if userObject is None:
+        userObject = UserSQL()
+        userObject.id = user.id
+        userObject.reference = user.mention_html()
+        userObject.first_name = user.first_name
+        userObject.last_name = user.last_name
+        userObject.polls_list = ""
+        db_sess.add(userObject)
+        db_sess.commit()
+
+    context.user_data['user'] = userObject
+
+
     return 1
 
 async def stop(update,context):
@@ -159,7 +175,8 @@ async def question_response(update, context):
 
     elif reply == 'На этом всё':
         poll = context.user_data['poll']
-        key = poll.save(update.effective_user.mention_html())
+        user = context.user_data['user']
+        key = poll.save(user.id)
         if key == "ERROR":
             await update.message.reply_text("Что-то пошло не так :(")
         else:
@@ -242,14 +259,12 @@ async def vote(update, context):
 async def open_survey(update,context):      #Повторное открытие опроса не сохраняет прошлые ответы, надо переработать poll.load()
     title = update.message.text
     poll = Form()
-    survey = poll.load(title)
-    if survey == "Load Error":
+    poll = poll.load(title)
+    if poll == "Load Error":
         await update.message.reply_text("Не удалось загрузить опрос, проверьте корректность кода и введите его ещё раз:")
         return 1
+
     context.user_data['poll'] = poll
-    poll.set_title(survey['title'])
-    userID = survey["userID"]
-    PollTitle = poll.title
     context.user_data['pollID'] = title
     context.user_data['answers'] = poll.answers
     context.user_data['chat_id'] = update.effective_message.chat_id
@@ -265,16 +280,15 @@ async def print_form(context):
 
     poll = context.user_data['poll']
     pollID = context.user_data['pollID']
-    survey = poll.load(pollID)
+    poll = poll.load(pollID)
+    survey = poll.questions
     questions = []
     textentities = []
 
-    userID = survey["userID"]
+    userReference = context.user_data['user'].reference
     PollTitle = poll.title
-    sumLen = 10 + len(str(userID)) + 34 + len(str(PollTitle))
+    sumLen = 10 + len(str(userReference)) + 34 + len(str(PollTitle))
     for k in sorted(survey):
-        if k == "userID":
-            continue
         ans = survey[k][1]
         if survey[k][0] == OPEN_ANSWER:
             questions.append([f"/ans{k} (🗒) " + ans + "\n"])
@@ -299,7 +313,7 @@ async def print_form(context):
     #     entities=textentities
     # )
     await context.bot.send_message(
-        text=f"Опрос от {userID}. Тема опроса: <b>{PollTitle}</b>\n"
+        text=f"Опрос от {userReference}. Тема опроса: <b>{PollTitle}</b>\n"
              f"Вот список вопросов:\n"+
              '\n'.join(map(lambda x : x[0],questions))+"\n"+
             f"Когда будете готовы отправить форму введите /done",
@@ -427,7 +441,6 @@ async def get_statistics(update, context):
 
 def main():
     db_session.global_init("dp/bot.db")
-
 
     # Создаём объект Application.
 
