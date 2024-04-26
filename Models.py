@@ -139,9 +139,6 @@ class Form:
             answers = json.load(js)
         return answers
 
-class Poll:
-    def __init__(self):
-        self.dict = {}
 
 
 if __name__ == '__main__':

@@ -4,7 +4,7 @@ import logging
 from telegram.constants import MessageEntityType
 from telegram.ext import Application, MessageHandler, filters, CommandHandler, ConversationHandler,CallbackQueryHandler
 
-from Models import Form, Poll
+from Models import Form
 from config import BOT_TOKEN
 from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, \
     InlineKeyboardButton, PollOption,MessageEntity,Update
@@ -86,7 +86,7 @@ async def start(update, context):
     global counter
     if not counter:
         counter=1
-        #return 1
+        return 1
     else:
         return ConversationHandler.END
 
@@ -108,13 +108,16 @@ async def help_command(update, context):
         "\n"
         "/vote - Отправь мне ID формы и проголосуй\n"
         "\n"
+        "/get_statistics - Посмотри ответы пользователей на созданные тобой опросы\n"
+        "\n"
         "/stop - Во время диалога с ботом жми сюда как на большую красную кнопку и кричи хелпсос\n(если хочешь завершить его конечно)\n"
         "\n"
         "/help - Ещё раз прослушать это всё",
         entities=[MessageEntity(type=MessageEntityType.BOT_COMMAND,offset=129,length=12),
                   MessageEntity(type=MessageEntityType.BOT_COMMAND,offset=229,length=5),
-                  MessageEntity(type=MessageEntityType.BOT_COMMAND,offset=270,length=5),
-                  MessageEntity(type=MessageEntityType.BOT_COMMAND, offset=392, length=5)
+                  MessageEntity(type=MessageEntityType.BOT_COMMAND,offset=270,length=15),
+                  MessageEntity(type=MessageEntityType.BOT_COMMAND, offset=343, length=5),
+                  MessageEntity(type=MessageEntityType.BOT_COMMAND, offset=465, length=5)
                   ]
     )
     #return ConversationHandler.END
@@ -463,7 +466,6 @@ async def get_statistics(update, context):
     await update.message.reply_text(
         "Пришли мне идентификатор опроса, статистику по которому хочешь посмотреть"
     )
-
     return 4
 
 async def print_statistics(update,context):
