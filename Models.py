@@ -17,6 +17,7 @@ class Form:
         self.questions = {}
         self.num_of_questions = 0
         self.answers = {}
+        self.id = -1
 
     def set_title(self,title):
         self.title = title
@@ -58,7 +59,15 @@ class Form:
             answ = {}
             for i,el in self.questions.items():
                 type = el[0]
-                print(el[1])
+                if type == OPEN_ANSWER:
+                    answ[i] = []
+                else:
+                    answ[i] = {}
+                    for q in el[1]['options']:
+                        answ[i][q] = 0
+            self.answers = answ
+            self.id = key
+            json.dump(answ,js)
 
 
 
@@ -69,7 +78,15 @@ class Form:
         form.user_id = userID
         form.file = f'data/forms/{key}.json'
         form.answers = f"data/answers/{key}_answers.json"
-        db_sess = db_session.create_session()
+
+        user = db_sess.query(UserSQL).filter(UserSQL.id == userID).first()
+        if not user.polls_list:
+            user.polls_list = key
+        else:
+            user.polls_list = user.polls_list + "," + key
+        print(user)
+        print(user.polls_list)
+
         db_sess.add(form)
         db_sess.commit()
 
@@ -96,10 +113,31 @@ class Form:
 
         return self
 
-    def save_answers(self,answers):
-        self.answers = answers
+    def save_answers(self,user_answers):
+        #self.answers = answers
+
+        with open(f"data/answers/{self.id}_answers.json",mode='r') as js:
+            answers = json.load(js)
+
+        for i,el in answers.items():
+            if type(el) is list: #open answer
+                answers[i].append(user_answers[i])
+            else: #dict - Multiple Choice
+                answers[i][user_answers[i]] +=1
+
+        with open(f'data/answers/{self.id}_answers.json', mode='w') as js:
+            json.dump(answers,js)
 
 
+    def return_answers(self):
+        with open(f"data/answers/{self.id}_answers.json",mode='r') as js:
+            answers = json.load(js)
+        return answers
+
+    def return_questions(self):
+        with open(f"data/forms/{self.id}.json",mode='r') as js:
+            answers = json.load(js)
+        return answers
 
 class Poll:
     def __init__(self):

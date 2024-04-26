@@ -10,6 +10,7 @@ from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, ReplyKeyboardRem
     InlineKeyboardButton, PollOption,MessageEntity,Update
 
 from data import db_session
+from data.models.form import FormSQL
 from data.models.users import UserSQL
 
 # Запускаем логгирование
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 MULTIPLE_CHOICE = 3
 OPEN_ANSWER = 4
 
+counter = 0
 
 async def echo(update, context):
     """Sends a message with three inline buttons attached."""
@@ -81,9 +83,12 @@ async def start(update, context):
         db_sess.commit()
 
     context.user_data['user'] = userObject
-
-
-    return 1
+    global counter
+    if not counter:
+        counter=1
+        #return 1
+    else:
+        return ConversationHandler.END
 
 async def stop(update,context):
     await update.message.reply_text(
@@ -112,6 +117,7 @@ async def help_command(update, context):
                   MessageEntity(type=MessageEntityType.BOT_COMMAND, offset=392, length=5)
                   ]
     )
+    #return ConversationHandler.END
 
 
 async def getting_started(update,context):
@@ -434,9 +440,70 @@ async def done(update,context):
     return ConversationHandler.END
 
 async def get_statistics(update, context):
-    pass
+    #user = context.user_data['user']
+    polls_info = []
+    entities = []
+    #offset = 25
+    offset=0
+    db_sess = db_session.create_session()
+    user = db_sess.query(UserSQL).filter(UserSQL.id == update.effective_user.id).first()
+   # print(user.polls_list.split(','))
+    for poll in user.polls_list.split(','):
 
+        title = db_sess.query(FormSQL).filter(FormSQL.id == poll).first().title
+        polls_info.append(poll + " " + "Тема: " + title)
+        entities.append(MessageEntity(type = MessageEntityType.CODE,offset=offset,length=9))
+        offset+=7+len(title)+10
 
+    await update.message.reply_text(
+        #f"Вот список твоих опросов:\n"
+        "\n".join(polls_info),
+        entities=entities
+    )
+    await update.message.reply_text(
+        "Пришли мне идентификатор опроса, статистику по которому хочешь посмотреть"
+    )
+
+    return 4
+
+async def print_statistics(update,context):
+
+    db_sess = db_session.create_session()
+    key = update.message.text
+    form = db_sess.query(FormSQL).filter(FormSQL.id == key).first()
+    tt = Form()
+    form = tt.load(form.id)
+    if form is None:
+        await update.message.reply_text(
+            "Ошибочка вышла, пришли ещё раз"
+        )
+        return 4
+
+    print(form)
+    answers = form.return_answers()
+    questions = form.return_questions()
+    message = []
+    for i, el in answers.items():
+        if type(el) is list:  # open answer
+            t = f"Вопрос № {i}: " + questions[i][1] + "\n"
+            message.append(t)
+            t = "Ответы пользователей\n"
+            message.append(t)
+            message+=list(map(lambda x: str(x) + "\n",el))
+
+        else:  # dict - Multiple Choice
+            t = f"Вопрос № {i}: " + questions[i][1]["question"] + "\n"
+            message.append(t)
+            t = "Ответы пользователей\n"
+            for ans in el:
+                message.append(str(ans) + ' : ' + str(el[ans]) + "\n")
+
+    print(message)
+    await update.message.reply_text(
+        ''.join(message)
+    )
+
+    return ConversationHandler.END
 
 
 def main():
@@ -458,6 +525,7 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("okd", okd))
     application.add_handler(CommandHandler("close_keyboard", close_keyboard))
+    #application.add_handler(CommandHandler("get_statistics",get_statistics))
     #application.add_handler(CommandHandler("vote", vote))
     # Регистрируем обработчик в приложении.
 
@@ -497,11 +565,18 @@ def main():
         states = {
             1: [MessageHandler(filters.TEXT & ~ filters.COMMAND,getting_started)]
         },
-        fallbacks=[CommandHandler("stop", stop),CommandHandler("help", help_command),CommandHandler("create_poll",create_poll),CommandHandler("vote",vote)]
+        fallbacks=[CommandHandler("stop", stop),CommandHandler("help", help_command),CommandHandler("create_poll",create_poll),CommandHandler("vote",vote),CommandHandler("get_statistics",get_statistics)]
     )
     application.add_handler(start_handler)
 
-
+    statistics_handler = ConversationHandler(
+        entry_points=[CommandHandler("get_statistics",get_statistics)],
+        states={
+            4: [MessageHandler(filters.TEXT,print_statistics)]
+        },
+        fallbacks=[CommandHandler("stop",stop)]
+    )
+    application.add_handler(statistics_handler)
 
     application.add_handler(text_handler)
 
